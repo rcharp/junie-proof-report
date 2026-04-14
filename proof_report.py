@@ -317,7 +317,13 @@ def main():
         f.write(html)
 
     print(f"\n✅ Report saved: {output_path}")
-    os.system(f"open '{output_path}'")
+    import platform
+    if platform.system() == 'Darwin':
+        os.system(f"open '{output_path}'")
+    elif platform.system() == 'Windows':
+        os.startfile(output_path)
+    else:
+        os.system(f"xdg-open '{output_path}'")
 
 if __name__ == "__main__":
     main()
