@@ -284,6 +284,7 @@ def generate_report(business_name, city, trade):
       <li>1-year customer follow-up sequence</li>
     </ul>
     <p style="color:#c7d2fe;font-size:13px">No contracts · No setup fees · Live within 48 hours</p>
+    <a href="https://api.juniesystems.com/payment-link/69d31bf0a6c96e61a845fd3a" target="_blank" style="display:inline-block;margin-top:20px;background:#fff;color:#4f46e5;font-weight:800;font-size:16px;padding:14px 36px;border-radius:50px;text-decoration:none;letter-spacing:0.5px;">🚀 Get Started — $297/mo</a>
   </div>
 
 </div>
