@@ -48,16 +48,28 @@ def outscraper_search(query, limit=20, fields=None):
         print(f"  Outscraper error: {e}")
         return []
 
-def lookup_business(business_name, city, trade):
+def lookup_business(business_name, city, trade, phone=None):
     """Look up the specific business to get their reviews/rating"""
+    # Try by phone number first if provided
+    if phone:
+        digits = re.sub(r'\D', '', str(phone))
+        if digits.startswith('1') and len(digits) == 11:
+            digits = digits[1:]
+        if len(digits) == 10:
+            print(f"  Looking up by phone {phone}...")
+            results = outscraper_search(f"+1{digits}", limit=3, fields="name,reviews,rating,website,phone,place_id")
+            if results:
+                return results[0]
+
     print(f"  Looking up {business_name} in {city}...")
-    query = f"{business_name} {city} FL"
+    query = f"{business_name} {city}"
     results = outscraper_search(query, limit=5, fields="name,reviews,rating,website,phone,place_id")
     
-    # Find best match
+    # Find best match by name similarity
+    biz_lower = business_name.lower()
     for r in results:
         name = (r.get("name") or "").lower()
-        if business_name.lower()[:8] in name or name[:8] in business_name.lower():
+        if biz_lower[:6] in name or name[:6] in biz_lower:
             return r
     
     # Return first result if no close match
@@ -77,12 +89,12 @@ def fetch_competitors(trade, city, exclude_name=""):
     
     return competitors
 
-def generate_report(business_name, city, trade):
+def generate_report(business_name, city, trade, phone=None):
     job_value = get_job_value(trade)
 
     # Auto-lookup the business
     print(f"\nLooking up business data for {business_name}...")
-    biz_data = lookup_business(business_name, city, trade)
+    biz_data = lookup_business(business_name, city, trade, phone=phone)
     reviews = biz_data.get("reviews", 0) or 0
     rating = biz_data.get("rating", 0.0) or 0.0
     has_website = bool((biz_data.get("website") or "").strip())
@@ -306,9 +318,10 @@ def main():
     business_name = sys.argv[1]
     city = sys.argv[2]
     trade = sys.argv[3]
+    phone = sys.argv[4] if len(sys.argv) > 4 else None
 
     print(f"\n🔍 Generating proof report for {business_name} ({trade} in {city})...")
-    html = generate_report(business_name, city, trade)
+    html = generate_report(business_name, city, trade, phone=phone)
 
     safe_name = re.sub(r'[^a-z0-9]', '_', business_name.lower())
     filename = f"{safe_name}_proof_report.html"
