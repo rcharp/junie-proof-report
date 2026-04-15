@@ -213,7 +213,8 @@ def generate_report(business_name, city, trade, phone=None, manual_reviews=None,
             </span>
           </td>
           <td style="padding:10px 8px;text-align:center;font-size:13px">
-            <span style="color:#f59e0b">{'★' * int(comp_rating)}</span> {comp_reviews}
+            <span style="color:#f59e0b">{'★' * int(comp_rating)}</span>
+            <a href="{comp_link}" target="_blank" style="color:#94a3b8;text-decoration:none;border-bottom:1px dotted #64748b">{comp_reviews}</a>
           </td>
         </tr>"""
 
@@ -300,7 +301,9 @@ def generate_report(business_name, city, trade, phone=None, manual_reviews=None,
 
   <div class="metric-card">
     <div class="label">Your Google Reviews</div>
-    <div class="value {'red' if reviews < 10 else 'green'}">{reviews} reviews · {'★' * int(rating) if rating else '☆☆☆☆☆'} {f'{rating:.1f}' if rating else '0.0'}</div>
+    <div class="value {'red' if reviews < 10 else 'green'}">
+      <a href="{biz_maps_url}" target="_blank" style="color:inherit;text-decoration:none;border-bottom:1px dotted currentColor">{reviews} reviews</a> · {'★' * int(rating) if rating else '☆☆☆☆☆'} {f'{rating:.1f}' if rating else '0.0'}
+    </div>
     <div class="description">
       {'You have almost no reviews. Customers trust businesses with reviews. Without them, they choose your competitor.' if reviews < 10 else f'You have {reviews} reviews which is a start, but your top competitors have far more — and they\'re getting found first.'}
     </div>
