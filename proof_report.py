@@ -50,8 +50,19 @@ def outscraper_search(query, limit=20, fields=None):
 
 def lookup_business(business_name, city, trade, phone=None):
     """Look up the specific business to get their reviews/rating"""
+    # Try by place_id/google_id if provided as phone arg (maps URL or place ID)
+    if phone and ('ChIJ' in phone or '0x' in phone or 'maps.google' in phone or 'place/' in phone):
+        place_id = re.search(r'ChIJ[a-zA-Z0-9_-]+', phone)
+        gid = re.search(r'0x[0-9a-f]+:0x[0-9a-f]+', phone, re.IGNORECASE)
+        query = (place_id.group() if place_id else None) or (gid.group() if gid else None)
+        if query:
+            print(f"  Looking up by place ID...")
+            results = outscraper_search(query, limit=1, fields="name,reviews,rating,website,phone,place_id")
+            if results:
+                return results[0]
+
     # Try by phone number first if provided
-    if phone:
+    if phone and not any(x in phone for x in ['ChIJ','0x','maps','place/']):
         digits = re.sub(r'\D', '', str(phone))
         if digits.startswith('1') and len(digits) == 11:
             digits = digits[1:]
@@ -62,18 +73,27 @@ def lookup_business(business_name, city, trade, phone=None):
                 return results[0]
 
     print(f"  Looking up {business_name} in {city}...")
-    query = f"{business_name} {city}"
-    results = outscraper_search(query, limit=5, fields="name,reviews,rating,website,phone,place_id")
     
-    # Find best match by name similarity
-    biz_lower = business_name.lower()
-    for r in results:
-        name = (r.get("name") or "").lower()
-        if biz_lower[:6] in name or name[:6] in biz_lower:
-            return r
+    # Try progressively broader searches
+    queries = [
+        f"{business_name} {city} FL",
+        f"{business_name} FL",
+        f"{business_name}",
+    ]
     
-    # Return first result if no close match
-    return results[0] if results else {}
+    for query in queries:
+        results = outscraper_search(query, limit=5, fields="name,reviews,rating,website,phone,place_id")
+        if results:
+            biz_lower = business_name.lower()
+            for r in results:
+                name = (r.get("name") or "").lower()
+                if biz_lower[:5] in name or name[:5] in biz_lower:
+                    return r
+            # Return first result if no close name match but results exist
+            if results:
+                return results[0]
+    
+    return {}
 
 def fetch_competitors(trade, city, exclude_name=""):
     """Fetch competitors in same trade/city"""
@@ -89,14 +109,14 @@ def fetch_competitors(trade, city, exclude_name=""):
     
     return competitors
 
-def generate_report(business_name, city, trade, phone=None):
+def generate_report(business_name, city, trade, phone=None, manual_reviews=None, manual_rating=None):
     job_value = get_job_value(trade)
 
     # Auto-lookup the business
     print(f"\nLooking up business data for {business_name}...")
     biz_data = lookup_business(business_name, city, trade, phone=phone)
-    reviews = biz_data.get("reviews", 0) or 0
-    rating = biz_data.get("rating", 0.0) or 0.0
+    reviews = manual_reviews if manual_reviews is not None else (biz_data.get("reviews", 0) or 0)
+    rating = manual_rating if manual_rating is not None else (biz_data.get("rating", 0.0) or 0.0)
     has_website = bool((biz_data.get("website") or "").strip())
     
     print(f"  Found: {reviews} reviews, {rating}★, website: {'yes' if has_website else 'no'}")
@@ -318,10 +338,22 @@ def main():
     business_name = sys.argv[1]
     city = sys.argv[2]
     trade = sys.argv[3]
-    phone = sys.argv[4] if len(sys.argv) > 4 else None
+    # arg4 can be phone number, or reviews count, or Google Maps URL
+    phone = None
+    manual_reviews = None
+    manual_rating = None
+    if len(sys.argv) > 4:
+        arg4 = sys.argv[4]
+        if arg4.lstrip('0123456789').strip() == '' and len(arg4) <= 5:
+            manual_reviews = int(arg4)  # it's a review count
+        else:
+            phone = arg4
+    if len(sys.argv) > 5:
+        try: manual_rating = float(sys.argv[5])
+        except: pass
 
     print(f"\n🔍 Generating proof report for {business_name} ({trade} in {city})...")
-    html = generate_report(business_name, city, trade, phone=phone)
+    html = generate_report(business_name, city, trade, phone=phone, manual_reviews=manual_reviews, manual_rating=manual_rating)
 
     safe_name = re.sub(r'[^a-z0-9]', '_', business_name.lower())
     filename = f"{safe_name}_proof_report.html"
