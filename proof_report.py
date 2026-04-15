@@ -48,9 +48,55 @@ def outscraper_search(query, limit=20, fields=None):
         print(f"  Outscraper error: {e}")
         return []
 
+def normalize_phone_e164(phone):
+    """Normalize any phone format to +1XXXXXXXXXX for Outscraper"""
+    if not phone:
+        return None
+    digits = re.sub(r'\D', '', str(phone))
+    if digits.startswith('1') and len(digits) == 11:
+        digits = digits[1:]
+    if len(digits) == 10:
+        return f"+1{digits}"
+    return None
+
+def scrape_google_business(business_name, city):
+    """Use Playwright to scrape Google search for business reviews/rating"""
+    try:
+        from playwright.sync_api import sync_playwright
+        query = f"{business_name} {city}"
+        url = f"https://www.google.com/search?q={requests.utils.quote(query)}"
+        
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+                locale="en-US"
+            )
+            page = context.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=15000)
+            page.wait_for_timeout(2000)
+            content = page.inner_text("body")
+            browser.close()
+        
+        # Parse reviews and rating
+        review_match = re.search(r'([\d,]+)\s*(?:Google\s*)?reviews?', content, re.IGNORECASE)
+        rating_match = re.search(r'(\d\.\d)\s*(?:out of 5|\(|\s*\d[,\d]*\s*(?:Google|reviews?))', content)
+        website_match = bool(re.search(r'(?:website|web|visit site)', content, re.IGNORECASE))
+        
+        reviews = int(review_match.group(1).replace(',', '')) if review_match else 0
+        rating = float(rating_match.group(1)) if rating_match else 0.0
+        
+        if reviews > 0 or rating > 0:
+            print(f"  Google scrape found: {reviews} reviews, {rating}★")
+            return {"reviews": reviews, "rating": rating, "website": "" if not website_match else "found"}
+    except Exception as e:
+        pass
+    return {}
+
 def lookup_business(business_name, city, trade, phone=None):
     """Look up the specific business to get their reviews/rating"""
-    # Try by place_id/google_id if provided as phone arg (maps URL or place ID)
+    
+    # Try by place_id/google_id if provided
     if phone and ('ChIJ' in phone or '0x' in phone or 'maps.google' in phone or 'place/' in phone):
         place_id = re.search(r'ChIJ[a-zA-Z0-9_-]+', phone)
         gid = re.search(r'0x[0-9a-f]+:0x[0-9a-f]+', phone, re.IGNORECASE)
@@ -61,38 +107,32 @@ def lookup_business(business_name, city, trade, phone=None):
             if results:
                 return results[0]
 
-    # Try by phone number first if provided
-    if phone and not any(x in phone for x in ['ChIJ','0x','maps','place/']):
-        digits = re.sub(r'\D', '', str(phone))
-        if digits.startswith('1') and len(digits) == 11:
-            digits = digits[1:]
-        if len(digits) == 10:
-            print(f"  Looking up by phone {phone}...")
-            results = outscraper_search(f"+1{digits}", limit=3, fields="name,reviews,rating,website,phone,place_id")
-            if results:
-                return results[0]
-
-    print(f"  Looking up {business_name} in {city}...")
-    
-    # Try progressively broader searches
-    queries = [
-        f"{business_name} {city} FL",
-        f"{business_name} FL",
-        f"{business_name}",
-    ]
-    
-    for query in queries:
-        results = outscraper_search(query, limit=5, fields="name,reviews,rating,website,phone,place_id")
+    # Normalize and try phone lookup
+    e164 = normalize_phone_e164(phone) if phone else None
+    if e164:
+        print(f"  Looking up by phone {e164}...")
+        results = outscraper_search(e164, limit=3, fields="name,reviews,rating,website,phone,place_id")
         if results:
-            biz_lower = business_name.lower()
-            for r in results:
-                name = (r.get("name") or "").lower()
-                if biz_lower[:5] in name or name[:5] in biz_lower:
-                    return r
-            # Return first result if no close name match but results exist
-            if results:
-                return results[0]
-    
+            return results[0]
+
+    # Try Outscraper name search with progressively broader queries
+    print(f"  Looking up {business_name} in {city}...")
+    biz_lower = business_name.lower()
+    for query in [f"{business_name} {city} FL", f"{business_name} FL", business_name]:
+        results = outscraper_search(query, limit=5, fields="name,reviews,rating,website,phone,place_id")
+        for r in results:
+            name = (r.get("name") or "").lower()
+            if biz_lower[:5] in name or name[:5] in biz_lower:
+                return r
+        if results:
+            return results[0]
+
+    # Last resort: Playwright Google scrape
+    print(f"  Trying Google scrape...")
+    scraped = scrape_google_business(business_name, city)
+    if scraped:
+        return scraped
+
     return {}
 
 def fetch_competitors(trade, city, exclude_name=""):
