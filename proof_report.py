@@ -139,7 +139,7 @@ def fetch_competitors(trade, city, exclude_name=""):
     """Fetch competitors in same trade/city"""
     print(f"  Fetching {trade} competitors in {city}...")
     query = f"{trade} {city} FL"
-    results = outscraper_search(query, limit=20, fields="name,website,reviews,rating,phone")
+    results = outscraper_search(query, limit=20, fields="name,website,reviews,rating,phone,location_link")
     
     # Filter out the business itself
     competitors = []
@@ -189,17 +189,24 @@ def generate_report(business_name, city, trade, phone=None, manual_reviews=None,
         visibility_score += 10
 
     # Build competitor rows HTML
+    # Build Google search URL for the main business
+    biz_google_url = f"https://www.google.com/search?q={requests.utils.quote(business_name + ' ' + city)}"
+    biz_maps_url = biz_data.get('location_link') or biz_google_url
+
     comp_rows_html = ""
     for i, comp in enumerate(top_competitors):
         comp_name = comp.get("name", "")[:28]
         comp_reviews = comp.get("reviews", 0) or 0
         comp_rating = comp.get("rating", 0.0) or 0.0
         comp_has_site = bool((comp.get("website") or "").strip())
+        comp_link = comp.get("location_link") or f"https://www.google.com/search?q={requests.utils.quote(comp.get('name','') + ' ' + city)}"
         rank = i + 1
         comp_rows_html += f"""
         <tr>
           <td style="padding:10px 8px;color:#94a3b8;font-size:13px">#{rank}</td>
-          <td style="padding:10px 8px;font-size:14px;font-weight:600">{comp_name}</td>
+          <td style="padding:10px 8px;font-size:14px;font-weight:600">
+            <a href="{comp_link}" target="_blank" style="color:#e2e8f0;text-decoration:none;border-bottom:1px solid #4b5563">{comp_name}</a>
+          </td>
           <td style="padding:10px 8px;text-align:center">
             <span style="color:{'#22c55e' if comp_has_site else '#ef4444'};font-size:13px">
               {'✓ Yes' if comp_has_site else '✗ No'}
@@ -323,7 +330,9 @@ def generate_report(business_name, city, trade, phone=None, manual_reviews=None,
         <tbody>
           <tr class="you-row">
             <td style="padding:10px 8px;color:#6366f1;font-size:13px">YOU</td>
-            <td style="padding:10px 8px;font-size:14px;font-weight:600;color:#6366f1">{business_name[:28]}</td>
+            <td style="padding:10px 8px;font-size:14px;font-weight:600;color:#6366f1">
+              <a href="{biz_maps_url}" target="_blank" style="color:#6366f1;text-decoration:none;border-bottom:1px solid #6366f180">{business_name[:28]}</a>
+            </td>
             <td style="padding:10px 8px;text-align:center"><span style="color:{'#22c55e' if has_website else '#ef4444'};font-size:13px">{'✓ Yes' if has_website else '✗ No'}</span></td>
             <td style="padding:10px 8px;text-align:center;font-size:13px"><span style="color:#f59e0b">{'★' * int(rating) if rating else ''}</span> {reviews}</td>
           </tr>
